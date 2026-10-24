@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="sn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shona Calculator</title>
+<style>
+  :root { color-scheme: light; --navy:#172b4d; --green:#167d54; --bg:#f3f6fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,sans-serif; background:var(--bg); color:#172033; }
+  main { max-width:430px; margin:0 auto; padding:18px; }
+  h1 { font-size:1.5rem; margin:4px 0 3px; }
+  .sub { color:#5b6678; margin:0 0 16px; }
+  .screen { background:var(--navy); color:white; padding:20px 16px; border-radius:18px; min-height:150px; display:flex; flex-direction:column; justify-content:flex-end; gap:9px; overflow-wrap:anywhere; }
+  #expression { color:#c6d2e4; font-size:1.15rem; min-height:28px; text-align:right; }
+  #answer { font-size:2.1rem; font-weight:750; text-align:right; }
+  #words { color:#aaf0c9; text-align:right; font-size:1rem; line-height:1.45; }
+  .keys { display:grid; grid-template-columns:repeat(4,1fr); gap:9px; margin-top:14px; }
+  button { border:0; border-radius:13px; min-height:58px; font-size:1.25rem; font-weight:650; background:white; color:#172033; box-shadow:0 1px 3px #00000012; cursor:pointer; }
+  button.op { background:#e0e8f4; color:#172b4d; }
+  button.clear { background:#ffe7e4; color:#a12e22; }
+  button.equal { background:var(--green); color:white; }
+  .note { font-size:.82rem; color:#626d7c; line-height:1.5; margin-top:15px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Shona Calculator</h1>
+  <p class="sub">Calculator inotaura mhinduro nechiShona</p>
+  <section class="screen" aria-live="polite">
+    <div id="expression">0</div>
+    <div id="answer">0</div>
+    <div id="words">zero</div>
+  </section>
+  <section class="keys" aria-label="Calculator keys">
+    <button class="clear" data-action="clear">C</button>
+    <button class="op" data-action="back">⌫</button>
+    <button class="op" data-value="/">÷</button>
+    <button class="op" data-value="*">×</button>
+    <button data-value="7">7</button><button data-value="8">8</button><button data-value="9">9</button><button class="op" data-value="-">−</button>
+    <button data-value="4">4</button><button data-value="5">5</button><button data-value="6">6</button><button class="op" data-value="+">+</button>
+    <button data-value="1">1</button><button data-value="2">2</button><button data-value="3">3</button><button class="equal" data-action="equals">=</button>
+    <button data-value="0" style="grid-column:span 2">0</button><button data-value=".">.</button><button class="op" data-action="sign">±</button>
+  </section>
+  <p class="note">Prototype: inoshandisa nhamba dzakazara kusvika pamabhiriyoni. Mazwi echiShona, kunyanya pakubatanidza mazana nezviuru, anofanira kuongororwa nemutauri wechiShona usati waburitsa app zviri pamutemo.</p>
+</main>
+<script>
+const exprEl = document.getElementById('expression');
+const answerEl = document.getElementById('answer');
+const wordsEl = document.getElementById('words');
+let expression = '0';
+let justSolved = false;
+
+const units = {
+  0:'', 1:'rimwe', 2:'piri', 3:'tatu', 4:'ina',
+  5:'shanu', 6:'tanhatu', 7:'nomwe', 8:'sere', 9:'pfumbamwe'
+};
+// Forms used when a number is joined with "ne".
+const joinedUnits = {
+  1:'rimwe', 2:'mbiri', 3:'nhatu', 4:'ina', 5:'shanu',
+  6:'nhanhatu', 7:'nomwe', 8:'sere', 9:'pfumbamwe'
+};
+function under100(n) {
+  if (n < 10) return n === 0 ? '' : units[n];
+  if (n === 10) return 'gumi';
+  if (n < 20) return 'gumi ne' + joinedUnits[n - 10];
+  const tens = Math.floor(n / 10), ones = n % 10;
+  const tensWords = {2:'maviri',3:'matatu',4:'mana',5:'mashanu',6:'matanhatu',7:'manomwe',8:'masere',9:'mapfumbamwe'};
+  const base = 'makumi ' + tensWords[tens];
+  return ones ? base + ' ne' + joinedUnits[ones] : base;
+}
+function under1000(n) {
+  if (n < 100) return under100(n);
+  const h = Math.floor(n / 100), r = n % 100;
+  const hundreds = {1:'zana',2:'mazana maviri',3:'mazana matatu',4:'mazana mana',5:'mazana mashanu',6:'mazana matanhatu',7:'mazana manomwe',8:'mazana masere',9:'mazana mapfumbamwe'};
+  const base = hundreds[h];
+  if (!r) return base;
+  return base + (r < 10 ? ' ne' + joinedUnits[r] : ' ne' + under100(r));
+}
+function shonaNumber(value) {
+  if (!Number.isFinite(value)) return 'nhamba haisi iyo';
+  if (value < 0) return 'kubvisa ' + shonaNumber(-value);
+  if (!Number.isInteger(value)) return 'mhinduro ine decimal: ' + String(value);
+  if (value === 0) return 'zero';
+  if (value >= 1e12) return 'nhamba yakakura kupfuura inotsigirwa';
+  const groups = [];
+  let n = value;
+  while (n > 0) { groups.unshift(n % 1000); n = Math.floor(n / 1000); }
+  const names = ['', 'churu', 'miriyoni', 'bhiriyoni'];
+  const parts = [];
+  for (let i = 0; i < groups.length; i++) {
+    const g = groups[i];
+    if (!g) continue;
+    const scale = groups.length - 1 - i;
+    let part = under1000(g);
+    if (scale === 1) { const k = {2:'zviviri',3:'zvitatu',4:'zvina',5:'zvishanu',6:'zvitanhatu',7:'zvinomwe',8:'zvisere',9:'zvipfumbamwe'}; part = (g === 1 ? 'churu' : 'zvuru ' + (k[g] || under1000(g))); }
+    if (scale === 2) part = (g === 1 ? 'miriyoni rimwe' : 'mamiriyoni ' + under1000(g));
+    if (scale === 3) part = (g === 1 ? 'bhiriyoni rimwe' : 'mabhiriyoni ' + under1000(g));
+    parts.push(part);
+  }
+  return parts.join(' ne');
+}
+function render(result = null) {
+  exprEl.textContent = expression.replaceAll('*','×').replaceAll('/','÷');
+  let value;
+  if (result !== null) value = result;
+  else {
+    try {
+      if (/^[0-9+\-*/. ()]+$/.test(expression) && !/[+\-*/.]$/.test(expression)) {
+        value = Function('"use strict"; return (' + expression + ')')();
+      } else value = null;
+    } catch { value = null; }
+  }
+  if (value === null || !Number.isFinite(value)) {
+    answerEl.textContent = '…'; wordsEl.textContent = 'Isa nhamba kana ita calculation'; return;
+  }
+  answerEl.textContent = String(Number(value.toPrecision(12)));
+  wordsEl.textContent = shonaNumber(Number(value.toPrecision(12)));
+}
+function addValue(v) {
+  if (justSolved && /[0-9.]/.test(v)) expression = '0';
+  justSolved = false;
+  if (expression === '0' && /[0-9]/.test(v)) expression = v;
+  else expression += v;
+  render();
+}
+document.querySelector('.keys').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const v = b.dataset.value, action = b.dataset.action;
+  if (v !== undefined) { addValue(v); return; }
+  if (action === 'clear') { expression = '0'; justSolved = false; render(0); }
+  if (action === 'back') { expression = expression.length > 1 ? expression.slice(0,-1) : '0'; render(); }
+  if (action === 'sign') { expression = expression.startsWith('-') ? expression.slice(1) : '-' + expression; render(); }
+  if (action === 'equals') {
+    try {
+      if (!/^[0-9+\-*/. ()]+$/.test(expression)) throw Error();
+      const result = Function('"use strict"; return (' + expression + ')')();
+      if (!Number.isFinite(result)) throw Error();
+      expression = String(Number(result.toPrecision(12)));
+      justSolved = true; render(result);
+    } catch { answerEl.textContent = 'Error'; wordsEl.textContent = 'Tarisa mashandisiro enhamba'; }
+  }
+});
+render(0);
+</script>
+</body>
+</html>
